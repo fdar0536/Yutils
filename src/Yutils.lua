@@ -1049,6 +1049,49 @@ Yutils = {
 			end
 			-- Limit number bigger-equal minimal value and smaller-equal maximal value
 			return x < min and min or x > max and max or x
+		end,
+		ellipse = function(x, y, w, h, a)
+			if type(x) ~= "number" or
+			type(y) ~= "number" or
+			type(w) ~= "number" or
+			type(h) ~= "number" or
+			type(a) ~= "number" then
+				error("number, number, number, number and number expected", 2)
+			end
+			local ra = math.rad(a)
+			return x + w/2 * math.sin(ra), y + h/2 * math.cos(ra)
+		end,
+		randomway = function()
+			return math.random(0,1) * 2 - 1
+		end,
+		rotate = function(p, axis, angle)
+			if type(p) ~= "table" or #p ~= 3 or type(axis) ~= "string" or type(angle) ~= "number" then
+				error("table, string and number expected", 2)
+			elseif axis ~= "x" and axis ~= "y" and axis ~= "z" then
+				error("invalid axis", 2)
+			elseif type(p[1]) ~= "number" or type(p[2]) ~= "number" or type(p[3]) ~= "number" then
+				error("invalid table content", 2)
+			end
+			local ra = math.rad(angle)
+			if axis == "x" then
+				return {
+					p[1],
+					math.cos(ra)*p[2] - math.sin(ra)*p[3],
+					math.sin(ra)*p[2] + math.cos(ra)*p[3]
+				}
+			elseif axis == "y" then
+				return {
+					math.cos(ra)*p[1] + math.sin(ra)*p[3],
+					p[2],
+					-math.sin(ra)*p[1] + math.cos(ra)*p[3]
+				}
+			else
+				return {
+					math.cos(ra)*p[1] - math.sin(ra)*p[2],
+					math.sin(ra)*p[1] + math.cos(ra)*p[2],
+					p[3]
+				}
+			end
 		end
 	},
 	-- Algorithm sublibrary
@@ -1946,6 +1989,124 @@ Yutils = {
 				x, y, z, w = matrix.transform(x, y, 0)
 				return x / w, y / w
 			end)
+		end,
+		ellipse = function(w, h)
+			if type(w) ~= "number" or type(h) ~= "number" then
+				error("number and number expected", 2)
+			end
+			local w2, h2 = w/2, h/2
+			return string.format("m %d %d b %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+								0, h2,	-- move
+								0, h2, 0, 0, w2, 0,	-- curve 1
+								w2, 0, w, 0, w, h2,	-- curve 2
+								w, h2, w, h, w2, h,	-- curve 3
+								w2, h, 0, h, 0, h2	-- curve 4
+			)
+		end,
+		glance = function(edges, inner_size, outer_size)
+			if type(edges) ~= "number" or type(inner_size) ~= "number" or type(outer_size) ~= "number" or edges < 2 then
+				error("valid 3 numbers expected", 2)
+			end
+			-- Build shape
+			local shape, shape_n = {string.format("m 0 %d b", -outer_size)}, 1
+			local inner_p, outer_p
+			for i = 1, edges do
+				--Inner edge
+				inner_p = math.rotate({0, -inner_size, 0}, "z", ((i-0.5) / edges)*360)
+				--Outer edge
+				outer_p = math.rotate({0, -outer_size, 0}, "z", (i / edges)*360)
+				-- Add curve
+				shape_n = shape_n + 1
+				shape[shape_n] = string.format(" %d %d %d %d %d %d", inner_p[1], inner_p[2], inner_p[1], inner_p[2], outer_p[1], outer_p[2])
+			end
+			shape = table.concat(shape)
+			-- Shift to positive numbers
+			local min_x, min_y = 0, 0
+			shape:gsub("(%-?%d+)%s+(%-?%d+)", function(x, y)
+				min_x, min_y = math.min(min_x, x), math.min(min_y, y)
+			end)
+			shape = shape:gsub("(%-?%d+)%s+(%-?%d+)", function(x, y)
+				return string.format("%d %d", x-min_x, y-min_y)
+			end)
+			-- Return result
+			return shape
+		end,
+		heart = function(size, offset)
+			if type(size) ~= "number" or type(offset) ~= "number" then
+				error("number and number expected", 2)
+			end
+			-- Build shape from template
+			local shape = string.gsub("m 15 30 b 27 22 30 18 30 14 30 8 22 0 15 10 8 0 0 8 0 14 0 18 3 22 15 30", "%d+", function(num)
+				num = num / 30 * size
+				return math.round(num)
+			end)
+			-- Shift mid point of heart vertically
+			shape = shape:gsub("(m %-?%d+ %-?%d+ b %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ %-?%d+ )(%-?%d+)", function(head, y)
+				return string.format("%s%d", head, y + offset)
+			end)
+			-- Return result
+			return shape
+		end,
+		rectangle = function(w, h)
+			if type(w) ~= "number" or type(h) ~= "number" then
+				error("number and number expected", 2)
+			end
+			return string.format("m 0 0 l %d 0 %d %d 0 %d 0 0", w, w, h, h)
+		end,
+		ring = function(out_r, in_r)
+			if type(out_r) ~= "number" or type(in_r) ~= "number" or in_r >= out_r then
+				error("valid number and number expected", 2)
+			end
+			local out_r2, in_r2 = out_r*2, in_r*2
+			local off = out_r - in_r
+			return string.format("m %d %d b %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d m %d %d b %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+				0, out_r,	-- outer move
+				0, out_r, 0, 0, out_r, 0,	-- outer curve 1
+				out_r, 0, out_r2, 0, out_r2, out_r,	-- outer curve 2
+				out_r2, out_r, out_r2, out_r2, out_r, out_r2,	-- outer curve 3
+				out_r, out_r2, 0, out_r2, 0, out_r,	-- outer curve 4
+				off, off+in_r,	-- inner move
+				off, off+in_r, off, off+in_r2, off+in_r, off+in_r2,	-- inner curve 1
+				off+in_r, off+in_r2, off+in_r2, off+in_r2, off+in_r2, off+in_r,	-- inner curve 2
+				off+in_r2, off+in_r, off+in_r2, off, off+in_r, off,	-- inner curve 3
+				off+in_r, off, off, off, off, off+in_r	-- inner curve 4
+			)
+		end,
+		star = function(edges, inner_size, outer_size)
+			if type(edges) ~= "number" or type(inner_size) ~= "number" or type(outer_size) ~= "number" or edges < 2 then
+				error("valid 3 numbers expected", 2)
+			end
+			-- Build shape
+			local shape, shape_n = {string.format("m 0 %d l", -outer_size)}, 1
+			local inner_p, outer_p
+			for i = 1, edges do
+				-- Inner edge
+				inner_p = math.rotate({0, -inner_size, 0}, "z", ((i-0.5) / edges)*360)
+				-- Outer edge
+				outer_p = math.rotate({0, -outer_size, 0}, "z", (i / edges)*360)
+				-- Add lines
+				shape_n = shape_n + 1
+				shape[shape_n] = string.format(" %d %d %d %d", inner_p[1], inner_p[2], outer_p[1], outer_p[2])
+			end
+			shape = table.concat(shape)
+			-- Shift to positive numbers
+			local min_x, min_y = 0, 0
+			shape:gsub("(%-?%d+)%s+(%-?%d+)", function(x, y)
+				min_x, min_y = math.min(min_x, x), math.min(min_y, y)
+			end)
+			shape = shape:gsub("(%-?%d+)%s+(%-?%d+)", function(x, y)
+				return string.format("%d %d", x-min_x, y-min_y)
+			end)
+			-- Return result
+			return shape
+		end,
+		triangle = function(size)
+			if type(size) ~= "number" then
+				error("number expected", 2)
+			end
+			local h = math.sqrt(3) * size / 2
+			local base = -h / 6
+			return string.format("m %d %d l %d %d 0 %d %d %d", size/2, base, size, base+h, base+h, size/2, base)
 		end
 	},
 	-- Advanced substation alpha sublibrary
